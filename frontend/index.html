@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polygon zkEVM Job Platform</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #8247e5;
+        }
+        button, select {
+            background-color: #8247e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover, select:hover {
+            background-color: #6d35c4;
+            transform: scale(1.05);
+        }
+        input {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        #laptop {
+            width: 300px;
+            height: 200px;
+            background-color: #333;
+            margin: 20px auto;
+            border-radius: 10px 10px 0 0;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.5s;
+        }
+        #screen {
+            width: 280px;
+            height: 180px;
+            background-color: #8247e5;
+            margin: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            transition: all 0.5s;
+        }
+        #keyboard {
+            width: 320px;
+            height: 20px;
+            background-color: #444;
+            margin: 0 auto;
+            border-radius: 0 0 10px 10px;
+            transform-origin: top;
+            transition: all 0.5s;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Polygon zkEVM Job Platform</h1>
+        
+        <div id="laptop">
+            <div id="screen">Welcome!</div>
+        </div>
+        <div id="keyboard"></div>
+        
+        <div id="walletSection" class="section">
+            <button id="connectWallet">Connect Wallet</button>
+            <p id="walletAddress"></p>
+        </div>
+
+        <div id="networkSection" class="section">
+            <h2>Network Selection</h2>
+            <select id="network">
+                <option value="mainnet">Polygon zkEVM Mainnet</option>
+                <option value="testnet">Polygon zkEVM Cardona Testnet</option>
+            </select>
+            <button onclick="switchNetwork()">Switch Network</button>
+        </div>
+
+        <div id="jobSection" class="section">
+            <h2>Job Listing</h2>
+            <input type="text" id="jobId" placeholder="Enter Job ID">
+            <button onclick="fetchJob()">Fetch Job</button>
+            <div id="jobDetails"></div>
+        </div>
+
+        <div id="skillsSection" class="section">
+            <h2>Verify Skills</h2>
+            <input type="text" id="skills" placeholder="Enter skills (comma-separated)">
+            <button onclick="verifySkills()">Verify Skills</button>
+            <div id="skillsVerification"></div>
+        </div>
+
+        <div id="bridgeSection" class="section">
+            <h2>Bridge Assets</h2>
+            <a href="https://portal.polygon.technology/" target="_blank">Bridge assets using Polygon Portal</a>
+        </div>
+    </div>
+
+    <script>
+        let provider, signer, userAddress;
+        const API_BASE_URL = 'http://localhost:3001/api';
+
+        const networks = {
+            mainnet: {
+                chainId: '0x44d',  // 1101 in hex
+                chainName: "Polygon zkEVM Mainnet",
+                rpcUrls: ["https://zkevm-rpc.com"],
+                nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
+                blockExplorerUrls: ["https://zkevm.polygonscan.com/"]
+            },
+            testnet: {
+                chainId: '0x98c',  // 2442 in hex
+                chainName: "Polygon zkEVM Cardona Testnet",
+                rpcUrls: ["https://rpc.cardona.zkevm-rpc.com"],
+                nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
+                blockExplorerUrls: ["https://cardona-zkevm.polygonscan.com/"]
+            }
+        };
+
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+                    document.getElementById('walletAddress').textContent = `Connected: ${userAddress}`;
+                    document.getElementById('connectWallet').textContent = 'Wallet Connected';
+                } catch (error) {
+                    console.error('Failed to connect wallet:', error);
+                }
+            } else {
+                alert('Please install MetaMask!');
+            }
+        }
+
+        async function switchNetwork() {
+            if (!provider) {
+                alert('Please connect your wallet first.');
+                return;
+            }
+
+            const networkSelect = document.getElementById('network');
+            const selectedNetwork = networks[networkSelect.value];
+
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: selectedNetwork.chainId }],
+                });
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [selectedNetwork],
+                        });
+                    } catch (addError) {
+                        console.error('Failed to add network:', addError);
+                    }
+                } else {
+                    console.error('Failed to switch network:', switchError);
+                }
+            }
+        }
+
+        async function fetchJob() {
+            const jobId = document.getElementById('jobId').value;
+            const networkType = document.getElementById('network').value;
+            try {
+                const response = await axios.get(`${API_BASE_URL}/job/${jobId}?networkType=${networkType}`);
+                const jobDetails = response.data.jobListing;
+                document.getElementById('jobDetails').innerHTML = `
+                    <h3>${jobDetails.title}</h3>
+                    <p>Company: ${jobDetails.company}</p>
+                    <p>Location: ${jobDetails.location}</p>
+                    <p>Salary: ${jobDetails.salary}</p>
+                    <p>Description: ${jobDetails.description}</p>
+                    <p>Skills: ${jobDetails.skills.join(', ')}</p>
+                `;
+            } catch (error) {
+                console.error('Error fetching job:', error);
+                alert('Error fetching job');
+            }
+        }
+
+        async function verifySkills() {
+            if (!userAddress) {
+                alert('Please connect your wallet first.');
+                return;
+            }
+
+            const skills = document.getElementById('skills').value.split(',').map(s => s.trim());
+            const networkType = document.getElementById('network').value;
+            try {
+                const response = await axios.post(`${API_BASE_URL}/verify-skills`, 
+                    { skills, userId: userAddress, networkType }
+                );
+                const verifiedSkills = response.data.verifiedSkills;
+                document.getElementById('skillsVerification').innerHTML = verifiedSkills.map(skill => 
+                    `<p>${skill.skill}: ${skill.verified ? 'Verified' : 'Not Verified'} (${skill.verificationDate})</p>`
+                ).join('');
+            } catch (error) {
+                console.error('Error verifying skills:', error);
+                alert('Error verifying skills');
+            }
+        }
+
+        document.getElementById('connectWallet').addEventListener('click', connectWallet);
+        document.getElementById('network').addEventListener('change', switchNetwork);
+
+        // Laptop animation
+        document.getElementById('laptop').addEventListener('click', function() {
+            this.style.transform = this.style.transform === 'scale(1.1)' ? 'scale(1)' : 'scale(1.1)';
+            document.getElementById('screen').style.backgroundColor = 
+                document.getElementById('screen').style.backgroundColor === 'rgb(130, 71, 229)' ? '#4a4a4a' : '#8247e5';
+        });
+
+        // Dynamic welcome message
+        const welcomeMessages = ['Welcome!', 'Find Your Dream Job!', 'Explore Opportunities!', 'Connect & Grow!'];
+        let currentMessage = 0;
+        setInterval(() => {
+            document.getElementById('screen').textContent = welcomeMessages[currentMessage];
+            currentMessage = (currentMessage + 1) % welcomeMessages.length;
+        }, 3000);
+
+        // Add hover effect to sections
+        document.querySelectorAll('.section').forEach(section => {
+            section.addEventListener('mouseover', function() {
+                this.style.transform = 'scale(1.02)';
+            });
+            section.addEventListener('mouseout', function() {
+                this.style.transform = 'scale(1)';
+            });
+        });
+    </script>
+</body>
+</html>
